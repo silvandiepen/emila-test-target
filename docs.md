@@ -1,7 +1,3 @@
-## README
-
-This is a content-only project.
-
 ## About Puppies
 
 Puppies are adorable and playful.
