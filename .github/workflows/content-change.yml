@@ -231,33 +231,60 @@ jobs:
       - name: Upload preview assets
         id: upload_preview
         shell: bash
+        env:
+          OUTPUT_DIR: ${{ inputs.outputDirectory }}
+          PREVIEW_RESET_URL: ${{ inputs.previewResetUrl }}
+          PREVIEW_UPLOAD_URL: ${{ inputs.previewUploadUrl }}
+          WORKFLOW_TOKEN: ${{ inputs.workflowToken }}
         run: |
           STATUS=$(jq -r '.status // "preview_ready"' .emila/result.json)
-          OUTPUT_DIR="${{ inputs.outputDirectory }}"
 
           if [ "$STATUS" != "preview_ready" ]; then
             echo "Skipping preview upload because workflow status is $STATUS."
             exit 0
           fi
 
-          curl -fsSL -X POST "${{ inputs.previewResetUrl }}"             -H "Content-Type: application/json"             -d "$(jq -n               --arg workflowToken "${{ inputs.workflowToken }}"               '{workflowToken: $workflowToken}')"
+          python3 <<'PY'
+          import base64
+          import json
+          import mimetypes
+          import os
+          from pathlib import Path
+          from urllib.request import Request, urlopen
 
-          find "$OUTPUT_DIR" -type f -print0 | while IFS= read -r -d '' file; do
-            RELATIVE_PATH="${file#$OUTPUT_DIR/}"
-            CONTENT_TYPE=$(file --mime-type -b "$file")
-            CONTENT_BASE64_FILE=$(mktemp)
-            base64 "$file" | tr -d '
-' > "$CONTENT_BASE64_FILE"
+          output_dir = Path(os.environ["OUTPUT_DIR"])
+          workflow_token = os.environ["WORKFLOW_TOKEN"]
+          preview_reset_url = os.environ["PREVIEW_RESET_URL"]
+          preview_upload_url = os.environ["PREVIEW_UPLOAD_URL"]
 
-            jq -n               --arg workflowToken "${{ inputs.workflowToken }}"               --arg path "$RELATIVE_PATH"               --arg contentType "$CONTENT_TYPE"               --rawfile contentBase64 "$CONTENT_BASE64_FILE"               '{
-                workflowToken: $workflowToken,
-                path: $path,
-                contentType: $contentType,
-                contentBase64: $contentBase64
-              }'               | curl -fsSL -X POST "${{ inputs.previewUploadUrl }}"                 -H "Content-Type: application/json"                 --data-binary @-
+          def post_json(url, payload):
+              request = Request(
+                  url,
+                  data=json.dumps(payload).encode("utf-8"),
+                  headers={"Content-Type": "application/json"},
+                  method="POST"
+              )
+              with urlopen(request) as response:
+                  response.read()
 
-            rm -f "$CONTENT_BASE64_FILE"
-          done
+          post_json(preview_reset_url, {
+              "workflowToken": workflow_token
+          })
+
+          for file_path in output_dir.rglob("*"):
+              if not file_path.is_file():
+                  continue
+
+              content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+              content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
+
+              post_json(preview_upload_url, {
+                  "workflowToken": workflow_token,
+                  "path": file_path.relative_to(output_dir).as_posix(),
+                  "contentType": content_type,
+                  "contentBase64": content_base64
+              })
+          PY
 
       - name: Create or update pull request
         id: pull_request
