@@ -250,6 +250,7 @@ jobs:
           import mimetypes
           import os
           from pathlib import Path
+          from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
           output_dir = Path(os.environ["OUTPUT_DIR"])
@@ -261,11 +262,19 @@ jobs:
               request = Request(
                   url,
                   data=json.dumps(payload).encode("utf-8"),
-                  headers={"Content-Type": "application/json"},
+                  headers={
+                      "Accept": "application/json",
+                      "Content-Type": "application/json",
+                      "User-Agent": "emila-workflow/1.0"
+                  },
                   method="POST"
               )
-              with urlopen(request) as response:
-                  response.read()
+              try:
+                  with urlopen(request) as response:
+                      response.read()
+              except HTTPError as error:
+                  body = error.read().decode("utf-8", errors="replace")
+                  raise RuntimeError(f"{error.code} {error.reason}: {body}") from error
 
           post_json(preview_reset_url, {
               "workflowToken": workflow_token
@@ -335,7 +344,7 @@ jobs:
 
           if [ "$STATUS" = "preview_ready" ] && [ "${{ steps.upload_preview.outcome }}" != "success" ]; then
             STATUS="failed"
-            SUMMARY="Preview upload failed for job ${{ inputs.jobId }}."
+            SUMMARY="Preview upload failed for job ${{ inputs.jobId }}. Check the Upload preview assets step in GitHub Actions for the exact API error."
           fi
 
           jq -n             --arg token "${{ inputs.platformCallbackToken }}"             --arg clientId "${{ inputs.clientId }}"             --arg jobId "${{ inputs.jobId }}"             --arg revisionId "${{ inputs.revisionId }}"             --arg workflowType "content_change"             --arg status "$STATUS"             --arg summary "$SUMMARY"             --arg branchName "${{ steps.commit.outputs.branch_name || env.EMILA_BRANCH }}"             --arg commitSha "$COMMIT_SHA"             --arg previewUrl "${{ inputs.previewUrl }}"             --arg pullRequestUrl "${{ steps.pull_request.outputs.pull_request_url }}"             --arg workflowRunId "${{ github.run_id }}"             --arg ambiguityReason "$AMBIGUITY"             --argjson pullRequestNumber "${{ steps.pull_request.outputs.pull_request_number || 'null' }}"             --argjson changedFiles "$CHANGED_FILES"             '{
