@@ -1,1 +1,1 @@
-[".github/workflows/content-change.yml", ".github/workflows/content-publish.yml", "README.md"]
+[".emila/editable-paths.json", ".emila/files.json", ".emila/repository-tree.json", ".emila/result.json", ".github/workflows/content-change.yml", ".github/workflows/content-publish.yml", "README.md", "docs.md"]

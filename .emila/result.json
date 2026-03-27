@@ -1,10 +1,7 @@
 {
   "status": "preview_ready",
-  "summary": "Added new file docs.md with content about puppies",
-  "changedFiles": [
-    "docs.md",
-    "README.md"
-  ],
+  "summary": "Published content change",
+  "changedFiles": [],
   "files": [
     {
       "path": "docs.md",
