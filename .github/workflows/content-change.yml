@@ -233,6 +233,7 @@ jobs:
         shell: bash
         run: |
           STATUS=$(jq -r '.status // "preview_ready"' .emila/result.json)
+          OUTPUT_DIR="${{ inputs.outputDirectory }}"
 
           if [ "$STATUS" != "preview_ready" ]; then
             echo "Skipping preview upload because workflow status is $STATUS."
@@ -241,11 +242,11 @@ jobs:
 
           curl -fsSL -X POST "${{ inputs.previewResetUrl }}"             -H "Content-Type: application/json"             -d "$(jq -n               --arg workflowToken "${{ inputs.workflowToken }}"               '{workflowToken: $workflowToken}')"
 
-          while IFS= read -r -d '' file; do
-            RELATIVE_PATH="${file#${{ inputs.outputDirectory }}/}"
+          find "$OUTPUT_DIR" -type f -print0 | while IFS= read -r -d '' file; do
+            RELATIVE_PATH="${file#$OUTPUT_DIR/}"
             CONTENT_TYPE=$(file --mime-type -b "$file")
             CONTENT_BASE64_FILE=$(mktemp)
-            base64 < "$file" | tr -d '
+            base64 "$file" | tr -d '
 ' > "$CONTENT_BASE64_FILE"
 
             jq -n               --arg workflowToken "${{ inputs.workflowToken }}"               --arg path "$RELATIVE_PATH"               --arg contentType "$CONTENT_TYPE"               --rawfile contentBase64 "$CONTENT_BASE64_FILE"               '{
@@ -256,7 +257,7 @@ jobs:
               }'               | curl -fsSL -X POST "${{ inputs.previewUploadUrl }}"                 -H "Content-Type: application/json"                 --data-binary @-
 
             rm -f "$CONTENT_BASE64_FILE"
-          done < <(find "${{ inputs.outputDirectory }}" -type f -print0)
+          done
 
       - name: Create or update pull request
         id: pull_request
