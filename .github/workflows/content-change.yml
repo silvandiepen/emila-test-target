@@ -228,6 +228,19 @@ jobs:
             exit 1
           fi
 
+          if [ -f "${{ inputs.outputDirectory }}/index.html" ]; then
+            PREVIEW_ENTRYPOINT="index.html"
+          elif [ -f "${{ inputs.outputDirectory }}/index.htm" ]; then
+            PREVIEW_ENTRYPOINT="index.htm"
+          else
+            PREVIEW_ENTRYPOINT=""
+          fi
+
+          jq -n             --arg outputDirectory "${{ inputs.outputDirectory }}"             --arg entrypoint "$PREVIEW_ENTRYPOINT"             '{
+              outputDirectory: $outputDirectory,
+              entrypoint: $entrypoint
+            }' > .emila/preview-upload.json
+
       - name: Upload preview assets
         id: upload_preview
         shell: bash
@@ -257,6 +270,11 @@ jobs:
           workflow_token = os.environ["WORKFLOW_TOKEN"]
           preview_reset_url = os.environ["PREVIEW_RESET_URL"]
           preview_upload_url = os.environ["PREVIEW_UPLOAD_URL"]
+          metadata_path = Path(".emila/preview-upload.json")
+          metadata = {}
+
+          if metadata_path.exists():
+              metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
           def post_json(url, payload):
               request = Request(
@@ -280,6 +298,7 @@ jobs:
               "workflowToken": workflow_token
           })
 
+          asset_count = 0
           for file_path in output_dir.rglob("*"):
               if not file_path.is_file():
                   continue
@@ -293,6 +312,10 @@ jobs:
                   "contentType": content_type,
                   "contentBase64": content_base64
               })
+              asset_count += 1
+
+          metadata["assetCount"] = asset_count
+          metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
           PY
 
       - name: Create or update pull request
@@ -334,9 +357,19 @@ jobs:
           SUMMARY=$(jq -r '.summary // "Content branch updated."' .emila/result.json 2>/dev/null || printf 'Emila workflow result could not be parsed.')
           AMBIGUITY=$(jq -r '.ambiguityReason // ""' .emila/result.json 2>/dev/null || printf '')
           CHANGED_FILES=$(jq -c '.changedFiles // []' .emila/result.json 2>/dev/null || printf '[]')
+          PREVIEW_ASSET_COUNT=$(jq -r '.assetCount // 0' .emila/preview-upload.json 2>/dev/null || printf '0')
+          PREVIEW_ENTRYPOINT=$(jq -r '.entrypoint // ""' .emila/preview-upload.json 2>/dev/null || printf '')
           PULL_REQUEST_NUMBER="${{ steps.pull_request.outputs.pull_request_number }}"
           COMMIT_SHA="${{ steps.commit.outputs.commit_sha }}"
           if [ -z "$COMMIT_SHA" ]; then COMMIT_SHA="$(git rev-parse HEAD)"; fi
+
+          if [ "$STATUS" = "preview_ready" ]; then
+            SUMMARY="$SUMMARY Preview uploaded ${PREVIEW_ASSET_COUNT} assets from ${{ inputs.outputDirectory }}."
+
+            if [ -z "$PREVIEW_ENTRYPOINT" ]; then
+              SUMMARY="$SUMMARY No root index file was uploaded, so Emila will show a preview file listing."
+            fi
+          fi
 
           if [ "$STATUS" = "preview_ready" ] && [ "${{ steps.build_preview.outcome }}" != "success" ]; then
             STATUS="failed"
