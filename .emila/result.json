@@ -1,0 +1,27 @@
+{
+  "status": "preview_ready",
+  "summary": "Added a random songtext to the README.md",
+  "changedFiles": [
+    "README.md"
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "content": "A random songtext\n"
+    }
+  ],
+  "tasks": [
+    {
+      "title": "feat(Content): Add songtext to README.md",
+      "summary": "Added a random songtext to the README.md",
+      "commitMessage": "feat(Content): Add songtext to README.md",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "A random songtext\n"
+        }
+      ]
+    }
+  ],
+  "ambiguityReason": ""
+}
