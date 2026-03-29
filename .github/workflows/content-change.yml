@@ -330,10 +330,11 @@ jobs:
         if: always()
         shell: bash
         run: |
-          STATUS=$(jq -r '.status // "preview_ready"' .emila/result.json)
-          SUMMARY=$(jq -r '.summary // "Content branch updated."' .emila/result.json)
-          AMBIGUITY=$(jq -r '.ambiguityReason // ""' .emila/result.json)
-          CHANGED_FILES=$(jq -c '.changedFiles // []' .emila/result.json)
+          STATUS=$(jq -r '.status // "preview_ready"' .emila/result.json 2>/dev/null || printf 'failed')
+          SUMMARY=$(jq -r '.summary // "Content branch updated."' .emila/result.json 2>/dev/null || printf 'Emila workflow result could not be parsed.')
+          AMBIGUITY=$(jq -r '.ambiguityReason // ""' .emila/result.json 2>/dev/null || printf '')
+          CHANGED_FILES=$(jq -c '.changedFiles // []' .emila/result.json 2>/dev/null || printf '[]')
+          PULL_REQUEST_NUMBER="${{ steps.pull_request.outputs.pull_request_number }}"
           COMMIT_SHA="${{ steps.commit.outputs.commit_sha }}"
           if [ -z "$COMMIT_SHA" ]; then COMMIT_SHA="$(git rev-parse HEAD)"; fi
 
@@ -347,7 +348,7 @@ jobs:
             SUMMARY="Preview upload failed for job ${{ inputs.jobId }}. Check the Upload preview assets step in GitHub Actions for the exact API error."
           fi
 
-          jq -n             --arg token "${{ inputs.platformCallbackToken }}"             --arg clientId "${{ inputs.clientId }}"             --arg jobId "${{ inputs.jobId }}"             --arg revisionId "${{ inputs.revisionId }}"             --arg workflowType "content_change"             --arg status "$STATUS"             --arg summary "$SUMMARY"             --arg branchName "${{ steps.commit.outputs.branch_name || env.EMILA_BRANCH }}"             --arg commitSha "$COMMIT_SHA"             --arg previewUrl "${{ inputs.previewUrl }}"             --arg pullRequestUrl "${{ steps.pull_request.outputs.pull_request_url }}"             --arg workflowRunId "${{ github.run_id }}"             --arg ambiguityReason "$AMBIGUITY"             --argjson pullRequestNumber "${{ steps.pull_request.outputs.pull_request_number || 'null' }}"             --argjson changedFiles "$CHANGED_FILES"             '{
+          jq -n             --arg token "${{ inputs.platformCallbackToken }}"             --arg clientId "${{ inputs.clientId }}"             --arg jobId "${{ inputs.jobId }}"             --arg revisionId "${{ inputs.revisionId }}"             --arg workflowType "content_change"             --arg status "$STATUS"             --arg summary "$SUMMARY"             --arg branchName "${{ steps.commit.outputs.branch_name || env.EMILA_BRANCH }}"             --arg commitSha "$COMMIT_SHA"             --arg previewUrl "${{ inputs.previewUrl }}"             --arg pullRequestUrl "${{ steps.pull_request.outputs.pull_request_url }}"             --arg workflowRunId "${{ github.run_id }}"             --arg ambiguityReason "$AMBIGUITY"             --arg pullRequestNumber "$PULL_REQUEST_NUMBER"             --arg changedFiles "$CHANGED_FILES"             '{
               token: $token,
               clientId: $clientId,
               jobId: $jobId,
@@ -355,11 +356,11 @@ jobs:
               workflowType: $workflowType,
               status: $status,
               summary: $summary,
-              changedFiles: $changedFiles,
+              changedFiles: ($changedFiles | try fromjson catch []),
               branchName: $branchName,
               commitSha: $commitSha,
               previewUrl: $previewUrl,
-              pullRequestNumber: $pullRequestNumber,
+              pullRequestNumber: ($pullRequestNumber | if . == "" then null else try tonumber catch null end),
               pullRequestUrl: $pullRequestUrl,
               workflowRunId: $workflowRunId,
               ambiguityReason: $ambiguityReason
